@@ -93,7 +93,7 @@ def is_allowed(
 ) -> bool:
     """
     Docstring for is_allowed
-    
+
     :param base_url: base url
     :type base_url: str
     :param user_agent: Description
@@ -113,5 +113,5 @@ def is_allowed(
         ).fetchall()
     rp = robotparser.RobotFileParser()
     rp.parse(robots_txt)
-    
+
     return rp.can_fetch(user_agent, target_url)
