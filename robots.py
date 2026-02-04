@@ -50,13 +50,7 @@ def is_allowed(target_url: str) -> bool:
     :return: link can be crawled = True
     :rtype: bool
     """
-    base_url = urlparse(target_url).netloc
-
-    if base_url not in robots_cache:
-        rp = robotparser.RobotFileParser()
-        rp.set_url(f"{base_url}/robots.txt")
-        rp.read()
-        robots_cache[base_url] = rp
+    base_url = f"{urlparse(target_url).scheme}://{urlparse(target_url).netloc}"
 
     return get_robot_parser(base_url=base_url).can_fetch(
         HEADERS["User-Agent"], target_url
