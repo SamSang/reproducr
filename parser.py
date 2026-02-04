@@ -4,6 +4,8 @@ Parse raw data output
 
 from pathlib import Path
 
+# remember to install "bibtexparser<2" because it's more forgiving
+import bibtexparser
 from lxml import etree
 
 
@@ -35,3 +37,25 @@ def parse_jmir_xml_file(xml_file_path: str | Path) -> tuple[str, list[str]]:
         data_results.append(result.text)
 
     return doi, data_results
+
+
+def parse_bibtex_file(bibtex_file_path: str | Path) -> list[tuple[str, list[str]]]:
+    """
+    Extract data from bibtex file
+
+    :param bibtex_file_path: Path to bibtex file with raw data
+    :type bibtex_file_path: str | Path
+    :return: List of all the articles and their keywords found in the citation
+    :rtype: list[tuple[str, list[str]]]
+    """
+    entries = []
+    with open(bibtex_file_path, "r") as f:
+        db = bibtexparser.load(f)
+
+    for entry in db.entries:
+        keywords = []
+        if "keywords" in entry:
+            keywords = entry["keywords"]
+        entries.append((entry["doi"], keywords.split("; ")))
+
+    return entries
