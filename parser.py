@@ -13,8 +13,8 @@ def parse_jmir_xml_file(xml_file_path: str | Path) -> tuple[str, list[str]]:
 
     :param xml_file_path: Path to xml file with raw data
     :type xml_file_path: str | Path
-    :return: list of strings describing data availability.
-    :rtype: list[str]
+    :return: tuple of the doi and a list of strings describing data availability.
+    :rtype: tuple[ str, list[str]]
     """
     tree = etree.parse(xml_file_path)
 
