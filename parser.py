@@ -9,6 +9,25 @@ import bibtexparser
 from lxml import etree
 
 
+
+def parse_search_page(results: dict) -> list[dict]:
+    """
+    Loop through api results
+    Extract data from the output into a dict
+    Add extracted data to a list
+    return that list of dict
+    """
+    output = []
+    result_pmids = results.get("uids", [])
+    # TODO introduce parallelism here
+    for pmid in result_pmids:
+        result = {}
+        result["pmid"] = pmid
+        result["sortdate"] = results[pmid].get("sortdate", "")
+        output.append(result)
+    return output
+
+
 def parse_jmir_xml_file(xml_file_path: str | Path) -> tuple[str, list[str]]:
     """
     Extract data from xml file
@@ -31,7 +50,8 @@ def parse_jmir_xml_file(xml_file_path: str | Path) -> tuple[str, list[str]]:
 
     # Finds the 'p' tag that follows a 'title' containing 'Data Availability'
     data_availability = tree.xpath(
-        "//title[text()='Data Availability']/following-sibling::p"
+        "//title[re:test(normalize-space(.), '^data\\s*availability:?$', 'i')]/following-sibling::p",
+        namespaces={"re": "http://exslt.org/regular-expressions"},
     )
     for result in data_availability:
         data_results.append(result.text)
