@@ -54,7 +54,7 @@ def get_search_context(query: str, database="pmc") -> tuple[str, str, str]:
     response.raise_for_status()
     data: dict = response.json().get("esearchresult", {})
 
-    return data.get("webenv", None), data.get("querykey", None), data.get("count", None)
+    return data.get("webenv", None), data.get("querykey", None), int(data.get("count", 0))
 
 
 def get_search_page(webenv: str, query_key: str, retstart: int, retmax: int) -> list:
@@ -85,7 +85,7 @@ def get_search_page(webenv: str, query_key: str, retstart: int, retmax: int) -> 
     try:
         data = response.json()
     except requests.exceptions.JSONDecodeError:
-        print(response.text)
+        # print(response.text)
         data = {}
 
     return data.get("result", [])
@@ -106,5 +106,8 @@ def get_fetch_page(webenv: str, query_key: str, retstart: int, retmax: int):
     if API_KEY:
         params["api_key"] = API_KEY
     response = requests.get(f"{BASE_URL}/efetch.fcgi", params=params, timeout=30)
-    response.raise_for_status()
-    return response.text
+    try:
+        response.raise_for_status()
+        return response.text
+    except Exception:
+        return None
