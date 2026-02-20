@@ -1,65 +1,72 @@
 """
 Build persistent storage for the extracted data
 
-Currently just persistent storage in a csv for easy sharing.
-
-Enforcing the "data model" currently by
-programmatically writing to csv files
+In and AWS postgres instance
 """
 
-import csv
+import json
 from pathlib import Path
 
-"""
-Define paths to the set of csv files
-"""
-output_dir = Path(Path(__file__).parent, "output")
-data_available_file_path = Path(output_dir, "data-available.csv")
-keyword_file_path = Path(output_dir, "keyword.csv")
+import psycopg
 
-"""
-Make the files and directories is they don't exist
-"""
-output_dir.mkdir(parents=True, exist_ok=True)
-data_available_file_path.touch(exist_ok=True)
-keyword_file_path.touch(exist_ok=True)
-
-"""
-Common parameters for working with this set of csv files
-"""
-csv_params = {
-    "delimiter": ",",
-    "quotechar": '"',
-    "quoting": csv.QUOTE_ALL,
-}
-
-
-def write_data_available(doi: str, value: str) -> None:
+def get_config() -> tuple[str, str, str, str]:
     """
-    Write output about availability to a csv file
-
-    :param doi: DOI of the paper
-    :type doi: str
-    :param value: Text pulled from the relevant xml
-    :type value: str
+    Read values needed for database authentication
     """
-    with open(data_available_file_path, "a") as f:
-        csv_writer = csv.writer(f, **csv_params)
-        csv_writer.writerow([doi, value])
+    with open(Path(Path(__file__).parent, "config.json"), "r") as f:
+        postgres = json.load(f).get("postgres", {})
+
+    user = postgres["user"]
+    pw = postgres["pw"]
+    host = postgres["host"]
+    db_name = postgres["db_name"]
+
+    return user, pw, host, db_name
 
 
-def write_keyword(doi: str, keyword: str) -> None:
+USER, PW, HOST, DB_NAME = get_config()
+
+
+def write_efetch(data: list[tuple]) -> None:
     """
-    Write output from keyworkds to a csv file
-
-    :param doi: DOI of the paper
-    :type doi: str
-    :param value: one keyword pulled from the paper
-    :type value: str
+    Write data to the eftech table
+    Rely on positions in the tuple: jmid, doi, data_availability
     """
-    with open(keyword_file_path, "a") as f:
-        csv_writer = csv.writer(f, **csv_params)
-        csv_writer.writerow([doi, keyword])
+    with psycopg.connect(host=HOST, dbname=DB_NAME, user=USER, password=PW) as conn:
+        with conn.cursor() as cur:
+            with cur.copy(
+                "COPY efetch (jmid, doi, data_availability) FROM STDIN"
+            ) as copy:
+                copy.write(data)
+
+
+def write_esummary(data: list[dict]) -> None:
+    """
+    Write data to the eftech table
+    Iterate through the dictionary and insert one row at a time
+    using a shared cursor and transaction
+    """
+    with psycopg.connect(host=HOST, dbname=DB_NAME, user=USER, password=PW) as conn:
+        with conn.cursor() as cur:
+            for row in data:
+                query = f"INSERT INTO esummary ({', '.join(row.keys())}) VALUES ({','.join([f"%({col})s" for col in row])})"
+                cur.execute(query, row)
+
+
+def init(name="postgres") -> None:
+    """
+    Create tables if they do not exist
+    """
+    base_path = Path(Path(__file__).parent, name)
+    sql_paths = base_path.glob("*sql")
+
+    with psycopg.connect(host=HOST, dbname=DB_NAME, user=USER, password=PW) as conn:
+        with conn.cursor() as cur:
+            for sql_path in sql_paths:
+                with open(sql_path, "r") as f:
+                    print(f.read)
+                    cur.execute(f.read())
+
 
 def write_data(data: list[dict]) -> None:
     """
