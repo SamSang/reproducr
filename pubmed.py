@@ -7,6 +7,7 @@ from pathlib import Path
 import requests
 
 BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+RESULT_LIMIT = 10000  # limitation of the pubmed api
 
 
 def get_config() -> tuple[str, str, str]:
