@@ -1,0 +1,22 @@
+CREATE TABLE esummary (
+    uid TEXT PRIMARY KEY,
+    pubmed_id TEXT,
+    title TEXT,
+    journal TEXT,
+    journal_abbrev TEXT,
+    pubdate TEXT,
+    epubdate TEXT,
+    printpubdate TEXT,
+    sortdate TEXT,
+    pmc_live_date TEXT,
+    resolved_pubdate TEXT,
+    volume TEXT,
+    issue TEXT,
+    pages TEXT,
+    doi TEXT,
+    pmcid TEXT,
+    authors TEXT,
+    author_count INTEGER,
+    publication_types TEXT,
+    language TEXT
+);
