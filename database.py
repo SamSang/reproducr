@@ -1,71 +1,96 @@
-"""
-Build persistent storage for the extracted data
+from sqlalchemy.engine import URL
+from sqlalchemy import create_engine
+from sqlalchemy import Column, Text, Boolean, Integer
+from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.pool import NullPool
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy_json import mutable_json_type
+import os
+from dotenv import load_dotenv
 
-Currently just persistent storage in a csv for easy sharing.
+load_dotenv()
 
-Enforcing the "data model" currently by
-programmatically writing to csv files
-"""
+url = URL.create(
+    drivername='postgresql',
+    username=os.getenv('USER'),
+    password=os.getenv('PW'),
+    host=os.getenv('HOST'),
+    database=os.getenv('DB_NAME')
+)
 
-import csv
-from pathlib import Path
+engine = create_engine(url, poolclass=NullPool, connect_args={'sslmode': os.getenv('SSL_MODE')})
 
-"""
-Define paths to the set of csv files
-"""
-output_dir = Path(Path(__file__).parent, "output")
-data_available_file_path = Path(output_dir, "data-available.csv")
-keyword_file_path = Path(output_dir, "keyword.csv")
+Base = declarative_base()
 
-"""
-Make the files and directories is they don't exist
-"""
-output_dir.mkdir(parents=True, exist_ok=True)
-data_available_file_path.touch(exist_ok=True)
-keyword_file_path.touch(exist_ok=True)
+class ArticleDetailed(Base):
+    __tablename__ = "article_detailed"
+    __table_args__ = {'schema': 'daan_822'}
+    pmid = Column(Text(), primary_key=True,unique=True,nullable=False)
+    doi = Column(Text())
+    article_type = Column(Text())
+    article_title = Column(Text())
+    article_subject = Column(Text())
+    authors = Column(mutable_json_type(dbtype=JSON, nested=True))
+    pub_date = Column(Text())
+    keywords = Column(mutable_json_type(dbtype=JSON, nested=True))
+    reference_count = Column(Integer())
+    license_type = Column(Text())
+    journal_title = Column(Text())
+    publisher_name = Column(Text())
+    copyright_statement = Column(Text())
+    copyright_year = Column(Text())
+    abstract = Column(Text())
+    affiliations = Column(mutable_json_type(dbtype=JSON, nested=True))
+    has_supplemental = Column(Boolean())
+    figure_count = Column(Text())
+    table_count = Column(Text())
+    funding = Column(mutable_json_type(dbtype=JSON, nested=True))
+    data_available_details = Column(mutable_json_type(dbtype=JSON, nested=True))
+    data_available = Column(Boolean())
+    code_available_details = Column(mutable_json_type(dbtype=JSON, nested=True))
+    code_available = Column(Boolean())
 
-"""
-Common parameters for working with this set of csv files
-"""
-csv_params = {
-    "delimiter": ",",
-    "quotechar": '"',
-    "quoting": csv.QUOTE_ALL,
-}
+Base.metadata.create_all(engine)
 
+def create_connection() -> object:
+    session = sessionmaker(engine)
+    db_connection = session()
+    return db_connection
 
-def write_data_available(doi: str, value: str) -> None:
-    """
-    Write output about availability to a csv file
+def close_connection(con):
+    con.close()
+    return None
 
-    :param doi: DOI of the paper
-    :type doi: str
-    :param value: Text pulled from the relevant xml
-    :type value: str
-    """
-    with open(data_available_file_path, "a") as f:
-        csv_writer = csv.writer(f, **csv_params)
-        csv_writer.writerow([doi, value])
+def write_data_detailed(data,db_connection):
+        for rec in data:
+            if rec["pmid"] is not None:
+                db_connection.add(
+                    ArticleDetailed(
+                        pmid=rec["pmid"],
+                        doi=rec["doi"],
+                        article_type=rec["article_type"],
+                        article_title=rec["article_title"],
+                        article_subject=rec["article_subject"],
+                        authors=rec["authors"],
+                        pub_date=rec["pub_date"],
+                        keywords=rec["keywords"],
+                        reference_count=rec["reference_count"],
+                        license_type=rec["license_type"],
+                        journal_title=rec["journal_title"],
+                        publisher_name=rec["publisher_name"],
+                        copyright_statement=rec["copyright_statement"],
+                        copyright_year=rec["copyright_year"],
+                        abstract=rec["abstract"],
+                        affiliations=rec["affiliations"],
+                        has_supplemental=rec["has_supplemental"],
+                        figure_count=rec["figure_count"],
+                        table_count=rec["table_count"],
+                        funding=rec["funding"],
+                        data_available_details=rec["data_availability"],
+                        data_available=len(rec["data_availability"]) > 0,
+                        code_available_details=rec["code_availability"],
+                        code_available=len(rec["code_availability"]) > 0,
 
-
-def write_keyword(doi: str, keyword: str) -> None:
-    """
-    Write output from keyworkds to a csv file
-
-    :param doi: DOI of the paper
-    :type doi: str
-    :param value: one keyword pulled from the paper
-    :type value: str
-    """
-    with open(keyword_file_path, "a") as f:
-        csv_writer = csv.writer(f, **csv_params)
-        csv_writer.writerow([doi, keyword])
-
-def write_data(data: list[dict]) -> None:
-    """
-    Insert data to the database
-    """
-    # TODO write data to the database
-    print(data)
-    # print(len(data))
-    pass
+                    )
+                )
+                db_connection.commit()

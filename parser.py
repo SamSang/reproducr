@@ -2,114 +2,119 @@
 Parse raw data output
 """
 
-from pathlib import Path
-
 from lxml import etree
 
 
-def parse_search_page(results: dict) -> list[dict]:
-    """
-    Loop through api results
-    Extract data from the esummary into a dict
-    Add extracted data to a list
-    return that list of dict
-    """
-    output = []
-    result_pmids = results.get("uids", [])
-    # TODO introduce parallelism here using function `parse_pubmed_esummary`
-    # probably want to use threads to avoid copying a potentially large dictionary?
-    for pmid in result_pmids:
-        result = {}
-        result["pmid"] = pmid
-        result["sortdate"] = results[pmid].get("sortdate", "")
-        output.append(result)
-    return output
-
-
-def parse_pubmed_esummary(results: dict, pmid: str) -> dict:
-    """
-    Parse the results for one specific pmid
-    From the pubmed esummary return
-    Return the dictionary of needed data
-    """
-
-    article = results.get("result", {}).get(pmid)
-    if not article:
-        return {}
-
-    # Authors
-    authors = article.get("authors", [])
-    author_names = [a.get("name", "") for a in authors if "name" in a]
-
-    # Article IDs
-    doi = ""
-    pmcid = ""
-    pubmed_id = ""
-
-    for aid in article.get("articleids", []):
-        if aid.get("idtype") == "doi":
-            doi = aid.get("value", "")
-        if aid.get("idtype") == "pmcid":
-            pmcid = aid.get("value", "")
-        if aid.get("idtype") == "pmid":
-            pubmed_id = aid.get("value", "")
-
-    # Dates
-    pubdate = article.get("pubdate", "")
-    epubdate = article.get("epubdate", "")
-    printpubdate = article.get("printpubdate", "")
-    sortdate = article.get("sortdate", "")
-    pmc_live_date = article.get("pmclivedate", "")
-
-    resolved_date = epubdate or pubdate or printpubdate or sortdate
-
-    return {
-        "uid": pmid,                 # the key used in esummary
-        "pubmed_id": pubmed_id,      # the true PMID from articleids
-        "title": article.get("title", ""),
-        "journal": article.get("fulljournalname", ""),
-        "journal_abbrev": article.get("source", ""),
-        "pubdate": pubdate,
-        "epubdate": epubdate,
-        "printpubdate": printpubdate,
-        "sortdate": sortdate,
-        "pmc_live_date": pmc_live_date,
-        "resolved_pubdate": resolved_date,
-        "volume": article.get("volume", ""),
-        "issue": article.get("issue", ""),
-        "pages": article.get("pages", ""),
-        "doi": doi,
-        "pmcid": pmcid,
-        "authors": "; ".join(author_names),
-        "author_count": len(author_names),
-        "publication_types": "; ".join(article.get("pubtype", [])),
-        "language": "; ".join(article.get("lang", [])),
-    }
-
-
-def parse_efetch(article) -> tuple[str, str]:
+def parse_efetch(article) -> dict | None:
     """
     Extract semi-structured and structured data
     from a single article's lxml object
-    Return (pmid, doi, [data availability])
+    Returns a dict or None if pmid is missing
     """
-    # Require the pmid for this article
-    try:
-        pmid = article.findtext(".//article-id[@pub-id-type='pmid']")
-    except:
-        # if doi is missing, then continue to the next record
+
+    pmid = article.findtext(".//article-id[@pub-id-type='pmid']")
+    if not pmid:
         return None
 
-    # get the doi
     doi = article.findtext(".//article-id[@pub-id-type='doi']")
 
-    # Finds the 'p' tag that follows a 'title' containing 'Data Availability'
+    article_type = article.get("article-type", "")
+
+    title_el = article.find(".//article-title")
+    article_title = "".join(title_el.itertext()) if title_el is not None else ""
+
+    # Prefer epub date, fall back to ppub, then first available
+    pub_date_el = (
+        article.find(".//pub-date[@pub-type='epub']")
+        or article.find(".//pub-date[@date-type='pub']")
+        or article.find(".//pub-date")
+    )
+    pub_date = ""
+    if pub_date_el is not None:
+        parts = [
+            pub_date_el.findtext("year", ""),
+            pub_date_el.findtext("month", ""),
+            pub_date_el.findtext("day", ""),
+        ]
+        pub_date = "-".join(p for p in parts if p)
+
+    keywords = ["".join(kwd.itertext()) for kwd in article.findall(".//kwd")]
+
+    funding_els = article.findall(".//funding-statement") or article.findall(".//funding-source")
+    funding = ["".join(f.itertext()) for f in funding_els]
+
+    ns = {"re": "http://exslt.org/regular-expressions"}
+
     data_availability = article.xpath(
         ".//title[re:test(normalize-space(.), '^data\\s*availability:?$', 'i')]/following-sibling::p",
-        namespaces={"re": "http://exslt.org/regular-expressions"},
+        namespaces=ns,
     )
 
-    return (pmid, doi, ["".join(da.itertext()) for da in data_availability])
+    code_availability = article.xpath(
+        ".//title[re:test(normalize-space(.), '^code\\s*availability:?$', 'i')]/following-sibling::p",
+        namespaces=ns,
+    )
+
+    article_subject = article.findtext(".//subj-group[@subj-group-type='heading']/subject", "")
+
+    authors = []
+    for contrib in article.findall(".//contrib[@contrib-type='author']"):
+        authors.append({
+            "surname": contrib.findtext("name/surname", ""),
+            "given_names": contrib.findtext("name/given-names", ""),
+            "orcid":
+                contrib.findtext("contrib-id[@contrib-id-type='orcid']", "").strip(),
+            "is_corresponding": contrib.find("xref[@ref-type='corresp']") is not None,
+        })
+
+    reference_count = len(article.findall(".//ref-list/ref"))
+
+    license_el = article.find('.//license')
+    license_type = license_el.get("license-type") if license_el is not None else ""
+
+    journal_title = article.findtext(".//journal-title","")
+
+    publisher_name = article.findtext(".//publisher-name","")
+
+    copyright_year = article.findtext('.//copyright-year', "")
+
+    copyright_statement = article.findtext('.//copyright-statement', "")
+
+    affiliations = ["".join(aff.itertext()) for aff in article.findall(".//aff")]
+
+    has_supplemental = article.findtext(".//custom-meta[meta-name='pmc-prop-has-supplement']/meta-value", "") == "yes"
+
+    figure_count = len(article.findall(".//fig"))
+
+    table_count = len(article.findall(".//table-wrap"))
+
+    abstract_el = article.find(".//abstract")
+    abstract = "".join(abstract_el.itertext()).strip() if abstract_el is not None else ""
+
+    return {
+        "pmid": pmid,
+        "doi": doi,
+        "article_type": article_type,
+        "article_title": article_title,
+        "article_subject": article_subject,
+        "authors": authors,
+        "pub_date": pub_date,
+        "keywords": keywords,
+        "reference_count": reference_count,
+        "license_type": license_type,
+        "journal_title": journal_title,
+        "publisher_name": publisher_name,
+        "copyright_statement": copyright_statement,
+        "copyright_year": copyright_year,
+        "abstract": abstract,
+        "affiliations": affiliations,
+        "has_supplemental": has_supplemental,
+        "figure_count": figure_count,
+        "table_count": table_count,
+        "funding": funding,
+        "data_availability": ["".join(da.itertext()) for da in data_availability],
+        "code_availability": ["".join(ca.itertext()) for ca in code_availability],
+    }
 
 
 def parse_efetch_page(results: str) -> list[dict]:
@@ -124,34 +129,3 @@ def parse_efetch_page(results: str) -> list[dict]:
             output.append(record)
 
     return output
-
-
-def parse_jmir_xml_file(xml_file_path: str | Path) -> tuple[str, list[str]]:
-    """
-    Extract data from xml file
-
-    :param xml_file_path: Path to xml file with raw data
-    :type xml_file_path: str | Path
-    :return: tuple of the doi and a list of strings describing data availability.
-    :rtype: tuple[ str, list[str]]
-    """
-    tree = etree.parse(xml_file_path)
-
-    # Require the doi for this article
-    try:
-        doi = tree.xpath("//article-id[@pub-id-type='doi']/text()")[0]
-    except:
-        # if doi is missing, then pass an empty tuple
-        return (None, [])
-
-    data_results = []
-
-    # Finds the 'p' tag that follows a 'title' containing 'Data Availability'
-    data_availability = tree.xpath(
-        "//title[re:test(normalize-space(.), '^data\\s*availability:?$', 'i')]/following-sibling::p",
-        namespaces={"re": "http://exslt.org/regular-expressions"},
-    )
-    for result in data_availability:
-        data_results.append(result.text)
-
-    return doi, data_results
