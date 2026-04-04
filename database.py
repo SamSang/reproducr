@@ -1,7 +1,7 @@
 from sqlalchemy.engine import URL
 from sqlalchemy import create_engine
 from sqlalchemy import Column, Text, Boolean, Integer
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from sqlalchemy.pool import NullPool
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy_json import mutable_json_type
@@ -12,7 +12,7 @@ load_dotenv()
 
 url = URL.create(
     drivername='postgresql',
-    username=os.getenv('USER'),
+    username=os.getenv('DB_USER'),
     password=os.getenv('PW'),
     host=os.getenv('HOST'),
     database=os.getenv('DB_NAME')
@@ -50,9 +50,40 @@ class ArticleDetailed(Base):
     code_available_details = Column(mutable_json_type(dbtype=JSON, nested=True))
     code_available = Column(Boolean())
 
+
+class DataAvailableStatement(Base):
+    __tablename__ = "data_available_statement"
+    __table_args__ = {'schema': 'daan_822'}
+    statement = Column(Text(), primary_key=True)
+    c = Column(Integer)
+
+class StatementCode(Base):
+    __tablename__ = "statement_code"
+    __table_args__ = {'schema': 'daan_822'}
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    description = Column(Text())
+
+class DataAvailableCoded(Base):
+    __tablename__ = "data_available_coded"
+    __table_args__ = {'schema': 'daan_822'}
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    original_value = Column(Text())
+    raw_response = Column(Text())
+    codes = Column(mutable_json_type(dbtype=JSON, nested=True))
+    model_name = Column(Text())
+
 Base.metadata.create_all(engine)
 
-def create_connection() -> object:
+CODES = [
+     "Not applicable",
+     "Not stated",
+     "Data used is in paper",
+     "Data available in the Supplemental Information",
+     "Data available in a public respository",
+     "Data available upon request",
+]
+
+def create_connection() -> Session:
     session = sessionmaker(engine)
     db_connection = session()
     return db_connection
@@ -94,3 +125,14 @@ def write_data_detailed(data,db_connection):
                     )
                 )
                 db_connection.commit()
+
+def init_codes() -> None:
+    con = create_connection()
+    for code in CODES:
+        con.add(
+            StatementCode(
+                description = code
+            )
+        )
+    con.commit()
+    con.close()

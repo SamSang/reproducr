@@ -1,0 +1,49 @@
+default:
+  system_prompt: |
+    You are an expert data extraction assistant.
+    Please extract the data availability status from the provided text.
+    Return ONLY a valid JSON list of strings containing one or more of the following exact categories:
+    - "not_applicable": data availability statement affirmed as not applicable
+    - "not_stated": overall absence of content relating to the data availability statement
+    - "in_paper": data is available in the paper
+    - "in_supplemental": data is available in the supplemental information
+    - "public_repository": data is available in a public repository
+    - "upon_request": data is available upon request
+
+    Do not include any conversational text, explanations, or markdown wrappers like ```json.
+    
+  user_prompt: "{user_input}"
+
+copilot:
+  system_prompt: >
+    Please extract the data availability status from the provided text.
+    Return ONLY a valid JSON list of strings containing one or more of the following exact categories:
+    - "not_applicable": data availability statement affirmed as not applicable
+    - "not_stated": overall absence of content relating to the data availability statement
+    - "in_paper": data is available in the paper
+    - "in_supplemental": data is available in the supplemental information
+    - "public_repository": data is available in a public repository
+    - "upon_request": data is available upon request
+
+    Do not include any conversational text, explanations, or markdown wrappers like ```json.
+    
+  user_prompt: >
+    Extract key entities from the following data:
+    {user_input}
+
+qwen2.5:7b:
+  system_prompt: >
+    Please extract the data availability status from the provided text.
+    Return ONLY a valid JSON list of strings containing one or more of the following exact categories:
+    - "not_applicable": data availability statement affirmed as not applicable
+    - "not_stated": overall absence of content relating to the data availability statement
+    - "in_paper": data is available in the paper
+    - "in_supplemental": data is available in the supplemental information
+    - "public_repository": data is available in a public repository
+    - "upon_request": data is available upon request
+
+    Do not include any conversational text, explanations, or markdown wrappers like ```json.
+    
+  user_prompt: >
+    Extract key entities from the following data:
+    {user_input}
