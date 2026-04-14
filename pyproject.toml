@@ -1,6 +1,6 @@
 [project]
 name = "reproducr"
-version = "0.1.0"
+version = "1.0.0"
 description = "Coursework investigating reproducible research, with an emphasis on data collection and cleaning."
 readme = "README.md"
 requires-python = ">=3.13"
